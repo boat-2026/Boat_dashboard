@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0b1a2e">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>Charleston Boating</title>
+<title>Boating Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet">
 <style>
@@ -125,6 +125,47 @@ body::before {
   line-height: 1;
 }
 .theme-toggle:hover { background: var(--bg-card-hover); color: var(--text); }
+
+.location-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  animation: fadeIn 0.5s ease 0.05s both;
+}
+.location-input {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.location-input::placeholder { color: var(--text-muted); }
+.location-input:focus { border-color: var(--accent); }
+.location-btn {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  color: var(--text-dim);
+  font-family: var(--font-body);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+.location-btn:hover { background: var(--bg-card-hover); color: var(--text); }
+.station-info {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  letter-spacing: 0.3px;
+}
 
 .header {
   display: flex;
@@ -286,20 +327,49 @@ body::before {
 .direction.rising { background: rgba(102,187,106,0.15); color: var(--accent-green); }
 .direction.falling { background: rgba(239,83,80,0.15); color: var(--accent-red); }
 
-.tide-svg { width: 100%; height: 80px; }
+.tide-chart-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.tide-chart-wrap::-webkit-scrollbar { height: 4px; }
+.tide-chart-wrap::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+[data-theme="day"] .tide-chart-wrap::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); }
+
+.tide-svg { height: 90px; display: block; }
 .tide-svg .area { fill: rgba(79,195,247,0.08); }
 .tide-svg .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .tide-svg .now-line { stroke: rgba(255,255,255,0.2); stroke-width: 1; stroke-dasharray: 3,3; }
 .tide-svg .now-dot { fill: var(--accent); }
 .tide-svg .grid-line { stroke: rgba(255,255,255,0.04); stroke-width: 0.5; }
+.tide-svg .day-divider { stroke: rgba(255,255,255,0.12); stroke-width: 1; }
+[data-theme="day"] .tide-svg .day-divider { stroke: rgba(0,0,0,0.12); }
 .tide-svg text { fill: var(--text-muted); font-family: var(--font-body); font-size: 9px; }
+.tide-svg .day-label { font-size: 10px; font-weight: 600; fill: var(--text-dim); }
 
 .tide-schedule {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: 14px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
+.tide-day-label {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 6px 0 2px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+.tide-day-label:first-child { border-top: none; margin-top: 0; }
 
 .tide-event {
   display: flex;
@@ -529,7 +599,7 @@ body::before {
 
 .meter-factors {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
   gap: 6px;
 }
 
@@ -746,6 +816,12 @@ body::before {
     </div>
   </div>
 
+  <div class="location-bar">
+    <input type="text" class="location-input" id="locationInput" placeholder="Search location (e.g. Miami, FL)..." autocomplete="off" onkeydown="if(event.key==='Enter')searchLocation()">
+    <button class="location-btn" id="locationBtn" onclick="searchLocation()">📍 Search</button>
+  </div>
+  <div class="station-info" id="stationInfo"></div>
+
   <div class="status-bar">
     <div class="status-pill good" id="statusPill">
       <span class="dot"></span>
@@ -774,6 +850,7 @@ body::before {
       <div class="meter-factor"><div class="mf-icon">🌧</div><div class="mf-score" id="mfRain">--</div><div class="mf-label">Rain</div></div>
       <div class="meter-factor"><div class="mf-icon">👁</div><div class="mf-score" id="mfVis">--</div><div class="mf-label">Visibility</div></div>
       <div class="meter-factor"><div class="mf-icon">🌡</div><div class="mf-score" id="mfTemp">--</div><div class="mf-label">Comfort</div></div>
+      <div class="meter-factor"><div class="mf-icon">🌙</div><div class="mf-score" id="mfLight">--</div><div class="mf-label">Light</div></div>
     </div>
   </div>
 
@@ -786,17 +863,19 @@ body::before {
   </div>
 
   <div class="cards-grid">
-    <div class="card" id="tideCard">
+    <div class="card full-width" id="tideCard">
       <div class="card-header">
-        <div class="card-title"><div class="card-icon tide-icon">🌊</div>TIDES</div>
-        <div class="card-badge">Charleston Harbor</div>
+        <div class="card-title"><div class="card-icon tide-icon">🌊</div>TIDES — 4 DAY</div>
+        <div class="card-badge" id="tideBadge">Charleston Harbor</div>
       </div>
       <div class="tide-now">
         <span class="level" id="tideLevel">--</span>
         <span class="unit">ft</span>
         <span class="direction rising" id="tideDir">---</span>
       </div>
-      <svg class="tide-svg" id="tideSvg" viewBox="0 0 440 80" preserveAspectRatio="none"></svg>
+      <div class="tide-chart-wrap">
+        <svg class="tide-svg" id="tideSvg" viewBox="0 0 1200 90" preserveAspectRatio="xMinYMid meet"></svg>
+      </div>
       <div class="tide-schedule" id="tideSchedule"></div>
     </div>
 
@@ -875,9 +954,11 @@ body::before {
 </div>
 
 <script>
-const LAT = 32.7766;
-const LON = -79.9309;
-const NOAA_STATION = '8665530';
+let LAT = 32.7766;
+let LON = -79.9309;
+let NOAA_STATION = '8665530';
+let NOAA_STATION_NAME = 'Charleston Harbor';
+let noaaStationsCache = null;
 
 function fmt12(dateStr) {
   const d = new Date(dateStr);
@@ -920,27 +1001,65 @@ function boatingCondition(wind, rain, vis) {
   return { cls: 'good', text: 'Good Conditions' };
 }
 
-function calcBoatingScore(windMph, gustMph, rainPct, visMi, tempF, weatherCode) {
-  // Wind score (0-10): 0-5mph=10, 5-10=8, 10-15=6, 15-20=4, 20-25=2, 25+=1
-  // Gheenoe/small boat — wind matters a lot
+// lightFraction: 0 = full dark, 1 = full daylight, fractional for dawn/dusk
+// Pass null to auto-calculate for current time
+function calcLightScore(dateOrNull) {
+  const d = dateOrNull || new Date();
+  const sun = calcSun(d, LAT, LON);
+  const t = d.getTime();
+  const rise = sun.rise.getTime();
+  const set = sun.set.getTime();
+
+  // Civil twilight: ~30min before sunrise, ~30min after sunset
+  const twilight = 30 * 60 * 1000;
+  if (t >= rise && t <= set) return 10; // full daylight
+  if (t >= rise - twilight && t < rise) return 6; // dawn
+  if (t > set && t <= set + twilight) return 6; // dusk
+  if (t > set + twilight && t <= set + twilight * 2) return 3; // late dusk
+  if (t >= rise - twilight * 2 && t < rise - twilight) return 3; // early dawn
+  return 1; // full dark
+}
+
+// For planning blocks: estimate light score for a time range
+function calcBlockLightScore(dateStr, startH, endH) {
+  const mid = new Date(dateStr + 'T' + Math.floor((startH + endH) / 2).toString().padStart(2,'0') + ':00:00');
+  const start = new Date(dateStr + 'T' + startH.toString().padStart(2,'0') + ':00:00');
+  const end = new Date(dateStr + 'T' + endH.toString().padStart(2,'0') + ':00:00');
+  // Sample start, mid, end and average
+  const s1 = calcLightScore(start);
+  const s2 = calcLightScore(mid);
+  const s3 = calcLightScore(end);
+  return Math.round((s1 + s2 + s3) / 3);
+}
+
+function calcBoatingScore(windMph, gustMph, rainPct, visMi, tempF, weatherCode, lightScore) {
+  // Wind score — small boat, wind matters a lot
   let windScore;
   if (windMph <= 5) windScore = 10;
-  else if (windMph <= 8) windScore = 9;
-  else if (windMph <= 12) windScore = 7;
+  else if (windMph <= 8) windScore = 8;
+  else if (windMph <= 12) windScore = 6;
   else if (windMph <= 15) windScore = 5;
   else if (windMph <= 20) windScore = 3;
   else if (windMph <= 25) windScore = 2;
   else windScore = 1;
-  // Penalize heavy gusts
-  if (gustMph > windMph + 10) windScore = Math.max(1, windScore - 1);
+  // Penalize heavy gusts more aggressively
+  if (gustMph > windMph + 8) windScore = Math.max(1, windScore - 1);
+  if (gustMph > windMph + 15) windScore = Math.max(1, windScore - 1);
 
-  // Rain score (0-10): 0%=10, 20%=8, 40%=6, 60%=4, 80%=2, 100%=1
-  let rainScore = Math.round(10 - (rainPct / 100) * 9);
-  rainScore = Math.max(1, Math.min(10, rainScore));
+  // Rain score
+  let rainScore;
+  if (rainPct <= 5) rainScore = 10;
+  else if (rainPct <= 15) rainScore = 9;
+  else if (rainPct <= 30) rainScore = 7;
+  else if (rainPct <= 50) rainScore = 5;
+  else if (rainPct <= 70) rainScore = 3;
+  else if (rainPct <= 90) rainScore = 2;
+  else rainScore = 1;
   // Thunderstorm codes kill the score
   if ([95,96,99].includes(weatherCode)) rainScore = 1;
+  if ([82].includes(weatherCode)) rainScore = Math.min(rainScore, 2);
 
-  // Visibility score (0-10): 10+mi=10, 5-10=7, 2-5=4, <2=1
+  // Visibility score
   let visScore;
   if (visMi >= 10) visScore = 10;
   else if (visMi >= 7) visScore = 8;
@@ -949,21 +1068,27 @@ function calcBoatingScore(windMph, gustMph, rainPct, visMi, tempF, weatherCode) 
   else if (visMi >= 1) visScore = 2;
   else visScore = 1;
 
-  // Temp comfort score: sweet spot 65-85°F = 10, taper off outside that
+  // Temp comfort — sweet spot 68-82°F
   let tempScore;
-  if (tempF >= 65 && tempF <= 85) tempScore = 10;
-  else if (tempF >= 55 && tempF < 65) tempScore = 7;
-  else if (tempF >= 85 && tempF <= 92) tempScore = 8;
-  else if (tempF >= 45 && tempF < 55) tempScore = 5;
-  else if (tempF > 92 && tempF <= 100) tempScore = 6;
-  else if (tempF >= 35 && tempF < 45) tempScore = 3;
-  else tempScore = 2;
+  if (tempF >= 68 && tempF <= 82) tempScore = 10;
+  else if (tempF >= 60 && tempF < 68) tempScore = 8;
+  else if (tempF > 82 && tempF <= 88) tempScore = 8;
+  else if (tempF >= 50 && tempF < 60) tempScore = 6;
+  else if (tempF > 88 && tempF <= 95) tempScore = 5;
+  else if (tempF >= 40 && tempF < 50) tempScore = 4;
+  else if (tempF > 95) tempScore = 3;
+  else tempScore = 2; // below 40
 
-  // Weighted average: wind 40%, rain 25%, visibility 20%, temp 15%
-  const overall = windScore * 0.40 + rainScore * 0.25 + visScore * 0.20 + tempScore * 0.15;
+  // Light score — auto-calc if not provided
+  if (lightScore === undefined || lightScore === null) {
+    lightScore = calcLightScore(null);
+  }
+
+  // Weighted: wind 35%, rain 20%, visibility 15%, temp 10%, light 20%
+  const overall = windScore * 0.35 + rainScore * 0.20 + visScore * 0.15 + tempScore * 0.10 + lightScore * 0.20;
   const score = Math.max(1, Math.min(10, Math.round(overall)));
 
-  return { score, windScore, rainScore, visScore, tempScore };
+  return { score, windScore, rainScore, visScore, tempScore, lightScore };
 }
 
 function renderMeter(scores) {
@@ -1003,6 +1128,8 @@ function renderMeter(scores) {
   document.getElementById('mfVis').style.color = colorSub(scores.visScore);
   document.getElementById('mfTemp').textContent = scores.tempScore;
   document.getElementById('mfTemp').style.color = colorSub(scores.tempScore);
+  document.getElementById('mfLight').textContent = scores.lightScore;
+  document.getElementById('mfLight').style.color = colorSub(scores.lightScore);
 }
 
 function renderPlanning() {
@@ -1069,7 +1196,8 @@ function renderPlanning() {
     tempAvg = Math.round(tempAvg / count);
     gustMax = Math.round(gustMax);
 
-    var scores = calcBoatingScore(windAvg, gustMax, rainMax, visMin, tempAvg, worstCode);
+    var blockLight = calcBlockLightScore(dateStr, startH, endH);
+    var scores = calcBoatingScore(windAvg, gustMax, rainMax, visMin, tempAvg, worstCode, blockLight);
     var s = scores.score;
 
     var color;
@@ -1179,7 +1307,7 @@ let tidePredictions = null;
 async function fetchTides() {
   const today = new Date();
   const begin = new Date(today); begin.setHours(0,0,0,0);
-  const end = new Date(today); end.setDate(end.getDate() + 1); end.setHours(23,59,59);
+  const end = new Date(today); end.setDate(end.getDate() + 3); end.setHours(23,59,59);
   const fmtD = (d) => d.getFullYear() + '' + (d.getMonth()+1).toString().padStart(2,'0') + d.getDate().toString().padStart(2,'0');
 
   const hiloUrl = 'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date='+fmtD(begin)+'&end_date='+fmtD(end)+'&station='+NOAA_STATION+'&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json';
@@ -1201,16 +1329,37 @@ async function fetchTides() {
 function renderTides() {
   if (!tideData || !tideData.length) return;
   const now = new Date();
-  const todayEvents = tideData.filter(e => new Date(e.t).toDateString() === now.toDateString());
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+  // Group events by date
+  const grouped = {};
+  tideData.forEach(e => {
+    const d = new Date(e.t);
+    const key = d.toDateString();
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(e);
+  });
 
   const scheduleEl = document.getElementById('tideSchedule');
-  scheduleEl.innerHTML = todayEvents.map(e => {
-    const isHigh = e.type === 'H';
-    const isPast = new Date(e.t) < now;
-    return '<div class="tide-event" style="'+(isPast?'opacity:0.4':'')+'">' +
-      '<div class="arrow '+(isHigh?'high':'low')+'">'+(isHigh?'↑':'↓')+'</div>' +
-      '<div><div class="te-time">'+fmt12(e.t)+'</div><div class="te-label">'+(isHigh?'High':'Low')+' · '+parseFloat(e.v).toFixed(1)+'ft</div></div></div>';
-  }).join('');
+  let html = '';
+  Object.keys(grouped).forEach((dateKey, i) => {
+    const d = new Date(dateKey);
+    const isToday = d.toDateString() === now.toDateString();
+    const label = isToday ? 'Today' : days[d.getDay()] + ' ' + months[d.getMonth()] + ' ' + d.getDate();
+    html += '<div class="tide-day-label">' + label + '</div>';
+    grouped[dateKey].forEach(e => {
+      const isHigh = e.type === 'H';
+      const isPast = new Date(e.t) < now;
+      html += '<div class="tide-event" style="'+(isPast?'opacity:0.4':'')+'">' +
+        '<div class="arrow '+(isHigh?'high':'low')+'">'+(isHigh?'↑':'↓')+'</div>' +
+        '<div><div class="te-time">'+fmt12(e.t)+'</div><div class="te-label">'+(isHigh?'High':'Low')+' · '+parseFloat(e.v).toFixed(1)+'ft</div></div></div>';
+    });
+  });
+  scheduleEl.innerHTML = html;
+
+  // Update badge with station name
+  document.getElementById('tideBadge').textContent = NOAA_STATION_NAME;
 
   if (tidePredictions && tidePredictions.length) {
     let closest = tidePredictions.reduce((a, b) =>
@@ -1232,56 +1381,100 @@ function renderTides() {
 
 function drawTideChart(preds, now) {
   const svg = document.getElementById('tideSvg');
-  const W = 440, H = 80;
-  const todayPreds = preds.filter(p => new Date(p.t).toDateString() === now.toDateString());
-  if (!todayPreds.length) return;
+  if (!preds.length) return;
 
-  const vals = todayPreds.map(p => parseFloat(p.v));
+  const H = 90;
+  const PX_PER_DAY = 300; // width per day of data
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+  const startTime = new Date(preds[0].t).getTime();
+  const endTime = new Date(preds[preds.length - 1].t).getTime();
+  const timeRange = endTime - startTime;
+  const numDays = timeRange / (24 * 60 * 60 * 1000);
+  const W = Math.max(800, Math.round(numDays * PX_PER_DAY));
+
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.style.width = Math.max(W, 600) + 'px';
+
+  const vals = preds.map(p => parseFloat(p.v));
   const minV = Math.min(...vals) - 0.3;
   const maxV = Math.max(...vals) + 0.3;
-  const startTime = new Date(todayPreds[0].t).getTime();
-  const endTime = new Date(todayPreds[todayPreds.length - 1].t).getTime();
-  const timeRange = endTime - startTime;
 
   const toX = (t) => ((new Date(t).getTime() - startTime) / timeRange) * W;
-  const toY = (v) => H - ((parseFloat(v) - minV) / (maxV - minV)) * (H - 10) - 5;
+  const toY = (v) => H - 14 - ((parseFloat(v) - minV) / (maxV - minV)) * (H - 24);
 
-  let pathD = '', areaD = 'M ' + toX(todayPreds[0].t) + ' ' + H + ' ';
-  todayPreds.forEach((p, i) => {
+  let pathD = '', areaD = 'M ' + toX(preds[0].t) + ' ' + (H - 14) + ' ';
+  preds.forEach((p, i) => {
     const x = toX(p.t), y = toY(p.v);
     if (i === 0) { pathD += 'M '+x+' '+y; areaD += 'L '+x+' '+y; }
     else { pathD += ' L '+x+' '+y; areaD += ' L '+x+' '+y; }
   });
-  areaD += ' L '+toX(todayPreds[todayPreds.length-1].t)+' '+H+' Z';
+  areaD += ' L '+toX(preds[preds.length-1].t)+' '+(H-14)+' Z';
 
+  // Now marker
   const nowX = Math.min(W, Math.max(0, ((now.getTime() - startTime) / timeRange) * W));
   let nowY = H / 2;
-  for (let i = 1; i < todayPreds.length; i++) {
-    const t0 = new Date(todayPreds[i-1].t).getTime();
-    const t1 = new Date(todayPreds[i].t).getTime();
+  for (let i = 1; i < preds.length; i++) {
+    const t0 = new Date(preds[i-1].t).getTime();
+    const t1 = new Date(preds[i].t).getTime();
     if (now.getTime() >= t0 && now.getTime() <= t1) {
       const frac = (now.getTime() - t0) / (t1 - t0);
-      nowY = toY(parseFloat(todayPreds[i-1].v) + frac * (parseFloat(todayPreds[i].v) - parseFloat(todayPreds[i-1].v)));
+      nowY = toY(parseFloat(preds[i-1].v) + frac * (parseFloat(preds[i].v) - parseFloat(preds[i-1].v)));
       break;
     }
   }
 
+  // Grid lines and day dividers
   let gridLines = '';
-  for (let h = 0; h < 24; h += 6) {
-    const d = new Date(now); d.setHours(h, 0, 0, 0);
-    if (d.getTime() >= startTime && d.getTime() <= endTime) {
-      const x = ((d.getTime() - startTime) / timeRange) * W;
-      gridLines += '<line x1="'+x+'" y1="0" x2="'+x+'" y2="'+H+'" class="grid-line"/>';
-      const label = h===0?'12A':h===6?'6A':h===12?'12P':'6P';
-      gridLines += '<text x="'+x+'" y="'+(H-2)+'" text-anchor="middle">'+label+'</text>';
+  const firstDay = new Date(preds[0].t); firstDay.setHours(0,0,0,0);
+  for (let dayOff = 0; dayOff <= numDays + 1; dayOff++) {
+    const dayStart = new Date(firstDay); dayStart.setDate(dayStart.getDate() + dayOff);
+    const dayMs = dayStart.getTime();
+    if (dayMs >= startTime && dayMs <= endTime) {
+      const x = ((dayMs - startTime) / timeRange) * W;
+      gridLines += '<line x1="'+x+'" y1="0" x2="'+x+'" y2="'+H+'" class="day-divider"/>';
+      const isToday = dayStart.toDateString() === now.toDateString();
+      const label = isToday ? 'Today' : days[dayStart.getDay()];
+      gridLines += '<text x="'+(x+5)+'" y="10" class="day-label">'+label+'</text>';
     }
+    // 6-hour sub-gridlines
+    for (let h = 6; h < 24; h += 6) {
+      const sub = new Date(dayStart); sub.setHours(h);
+      if (sub.getTime() >= startTime && sub.getTime() <= endTime) {
+        const sx = ((sub.getTime() - startTime) / timeRange) * W;
+        gridLines += '<line x1="'+sx+'" y1="14" x2="'+sx+'" y2="'+(H-14)+'" class="grid-line"/>';
+        const slabel = h===6?'6A':h===12?'12P':'6P';
+        gridLines += '<text x="'+sx+'" y="'+(H-4)+'" text-anchor="middle">'+slabel+'</text>';
+      }
+    }
+  }
+
+  // Hi/Lo labels on chart
+  let hiloLabels = '';
+  if (tideData) {
+    tideData.forEach(e => {
+      const x = toX(e.t);
+      const y = toY(e.v);
+      const isHigh = e.type === 'H';
+      const offsetY = isHigh ? -6 : 12;
+      hiloLabels += '<text x="'+x+'" y="'+(y+offsetY)+'" text-anchor="middle" style="font-size:8px;fill:var(--text-dim)">' +
+        (isHigh?'H':'L')+' '+parseFloat(e.v).toFixed(1)+'</text>';
+    });
   }
 
   svg.innerHTML = gridLines +
     '<path d="'+areaD+'" class="area"/>' +
     '<path d="'+pathD+'" class="line"/>' +
+    hiloLabels +
     '<line x1="'+nowX+'" y1="0" x2="'+nowX+'" y2="'+H+'" class="now-line"/>' +
     '<circle cx="'+nowX+'" cy="'+nowY+'" r="4" class="now-dot"/>';
+
+  // Auto-scroll to show "now" in view
+  const wrap = document.querySelector('.tide-chart-wrap');
+  if (wrap) {
+    const scrollTarget = Math.max(0, nowX - wrap.offsetWidth / 3);
+    wrap.scrollLeft = scrollTarget;
+  }
 }
 
 // Open-Meteo Weather
@@ -1353,6 +1546,107 @@ function renderWeather() {
   }
 }
 
+// --- Location search & NOAA station finder ---
+async function fetchNOAAStations() {
+  if (noaaStationsCache) return noaaStationsCache;
+  const cached = localStorage.getItem('noaaStations');
+  if (cached) {
+    noaaStationsCache = JSON.parse(cached);
+    return noaaStationsCache;
+  }
+  const res = await fetch('https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions');
+  if (!res.ok) throw new Error('Failed to fetch NOAA stations');
+  const json = await res.json();
+  noaaStationsCache = json.stations.filter(s => s.tidal);
+  localStorage.setItem('noaaStations', JSON.stringify(noaaStationsCache));
+  return noaaStationsCache;
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 3959; // miles
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function findNearestStation(stations, lat, lon) {
+  let best = null, bestDist = Infinity;
+  stations.forEach(s => {
+    const d = haversine(lat, lon, s.lat, s.lng);
+    if (d < bestDist) { bestDist = d; best = s; }
+  });
+  return { station: best, distance: bestDist };
+}
+
+async function searchLocation() {
+  const input = document.getElementById('locationInput').value.trim();
+  if (!input) return;
+  const btn = document.getElementById('locationBtn');
+  btn.textContent = '⏳ ...';
+  const info = document.getElementById('stationInfo');
+
+  try {
+    // Geocode with Open-Meteo
+    const geoRes = await fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(input) + '&count=1&language=en&format=json');
+    const geoJson = await geoRes.json();
+    if (!geoJson.results || !geoJson.results.length) {
+      info.textContent = 'Location not found. Try a different search.';
+      btn.textContent = '📍 Search';
+      return;
+    }
+    const loc = geoJson.results[0];
+    LAT = loc.latitude;
+    LON = loc.longitude;
+
+    // Find nearest NOAA station
+    const stations = await fetchNOAAStations();
+    const nearest = findNearestStation(stations, LAT, LON);
+    NOAA_STATION = nearest.station.id;
+    NOAA_STATION_NAME = nearest.station.name;
+
+    // Update header
+    document.querySelector('.header-left h1').textContent = loc.name;
+    document.querySelector('.header-left .subtitle').textContent = (loc.admin1 || '') + (loc.country_code ? ', ' + loc.country_code : '');
+    info.textContent = 'NOAA Station: ' + NOAA_STATION_NAME + ' (#' + NOAA_STATION + ') — ' + Math.round(nearest.distance) + ' mi away';
+
+    // Save location
+    localStorage.setItem('savedLocation', JSON.stringify({
+      lat: LAT, lon: LON, station: NOAA_STATION, stationName: NOAA_STATION_NAME,
+      name: loc.name, region: loc.admin1 || '', country: loc.country_code || ''
+    }));
+
+    // Clear old cached data and reload
+    localStorage.removeItem('tideData');
+    localStorage.removeItem('tidePredictions');
+    localStorage.removeItem('tideDate');
+    localStorage.removeItem('weatherData');
+    localStorage.removeItem('weatherDate');
+    await loadAll();
+  } catch (e) {
+    console.warn('Location search failed:', e);
+    info.textContent = 'Search failed: ' + e.message;
+  }
+  btn.textContent = '📍 Search';
+}
+
+// Restore saved location on load
+function restoreSavedLocation() {
+  const saved = localStorage.getItem('savedLocation');
+  if (saved) {
+    try {
+      const loc = JSON.parse(saved);
+      LAT = loc.lat;
+      LON = loc.lon;
+      NOAA_STATION = loc.station;
+      NOAA_STATION_NAME = loc.stationName;
+      document.querySelector('.header-left h1').textContent = loc.name;
+      document.querySelector('.header-left .subtitle').textContent = (loc.region || '') + (loc.country ? ', ' + loc.country : '');
+      document.getElementById('stationInfo').textContent = 'NOAA Station: ' + loc.stationName + ' (#' + loc.station + ')';
+    } catch(e) {}
+  }
+}
+
 // Offline fallback
 function loadCached() {
   if (localStorage.getItem('tideDate') === new Date().toDateString()) {
@@ -1417,6 +1711,7 @@ function toggleTheme() {
   }
 })();
 
+restoreSavedLocation();
 loadCached();
 loadAll();
 setInterval(loadAll, 15 * 60 * 1000);
