@@ -1,5 +1,7 @@
 # Charleston Boating Dashboard
 
+**[Live Dashboard](https://boat-2026.github.io/Boat_dashboard/)**
+
 A single-page weather and tide dashboard for Charleston Harbor, built for quick go/no-go boating decisions.
 
 ## What It Does
