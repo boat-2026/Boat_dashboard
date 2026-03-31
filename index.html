@@ -854,6 +854,14 @@ body::before {
     </div>
   </div>
 
+  <!-- 3-Day Forecast (moved up) -->
+  <div class="card" style="margin-bottom:14px">
+    <div class="card-header">
+      <div class="card-title"><div class="card-icon weather-icon">📅</div>3-DAY FORECAST</div>
+    </div>
+    <div class="forecast-scroll" id="forecastScroll"></div>
+  </div>
+
   <!-- When to Go Planning Cards -->
   <div class="planning-section">
     <div class="planning-header">
@@ -939,12 +947,6 @@ body::before {
       </div>
     </div>
 
-    <div class="card full-width">
-      <div class="card-header">
-        <div class="card-title"><div class="card-icon weather-icon">📅</div>3-DAY FORECAST</div>
-      </div>
-      <div class="forecast-scroll" id="forecastScroll"></div>
-    </div>
   </div>
 
   <button class="refresh-btn" id="refreshBtn" onclick="loadAll()">
@@ -1032,7 +1034,8 @@ function calcBlockLightScore(dateStr, startH, endH) {
   return Math.round((s1 + s2 + s3) / 3);
 }
 
-function calcBoatingScore(windMph, gustMph, rainPct, visMi, tempF, weatherCode, lightScore) {
+// tideDirection: 'rising', 'falling', or null
+function calcBoatingScore(windMph, gustMph, rainPct, visMi, tempF, weatherCode, lightScore, tideDirection) {
   // Wind score — small boat, wind matters a lot
   let windScore;
   if (windMph <= 5) windScore = 10;
@@ -1085,7 +1088,12 @@ function calcBoatingScore(windMph, gustMph, rainPct, visMi, tempF, weatherCode, 
   }
 
   // Weighted: wind 35%, rain 20%, visibility 15%, temp 10%, light 20%
-  const overall = windScore * 0.35 + rainScore * 0.20 + visScore * 0.15 + tempScore * 0.10 + lightScore * 0.20;
+  let overall = windScore * 0.35 + rainScore * 0.20 + visScore * 0.15 + tempScore * 0.10 + lightScore * 0.20;
+
+  // Tide adjustment: rising tide = +0.5, falling tide = -0.5
+  if (tideDirection === 'rising') overall += 0.5;
+  else if (tideDirection === 'falling') overall -= 0.5;
+
   const score = Math.max(1, Math.min(10, Math.round(overall)));
 
   return { score, windScore, rainScore, visScore, tempScore, lightScore };
@@ -1196,8 +1204,26 @@ function renderPlanning() {
     tempAvg = Math.round(tempAvg / count);
     gustMax = Math.round(gustMax);
 
+    // Tide state for this window (if we have tide predictions)
+    var tideStr = '';
+    var blockTideDir = null;
+    if (tidePredictions && tidePredictions.length) {
+      var midTime = new Date(dateStr + 'T' + Math.floor((startH + endH) / 2).toString().padStart(2,'0') + ':00:00');
+      for (var j = 1; j < tidePredictions.length; j++) {
+        var t0 = new Date(tidePredictions[j-1].t).getTime();
+        var t1 = new Date(tidePredictions[j].t).getTime();
+        if (midTime.getTime() >= t0 && midTime.getTime() <= t1) {
+          var v0 = parseFloat(tidePredictions[j-1].v);
+          var v1 = parseFloat(tidePredictions[j].v);
+          if (v1 > v0) { tideStr = '↑ Rising'; blockTideDir = 'rising'; }
+          else { tideStr = '↓ Falling'; blockTideDir = 'falling'; }
+          break;
+        }
+      }
+    }
+
     var blockLight = calcBlockLightScore(dateStr, startH, endH);
-    var scores = calcBoatingScore(windAvg, gustMax, rainMax, visMin, tempAvg, worstCode, blockLight);
+    var scores = calcBoatingScore(windAvg, gustMax, rainMax, visMin, tempAvg, worstCode, blockLight, blockTideDir);
     var s = scores.score;
 
     var color;
@@ -1217,22 +1243,6 @@ function renderPlanning() {
     // Check if this block is in the past
     var blockEnd = new Date(dateStr + 'T' + endH.toString().padStart(2,'0') + ':00:00');
     var isPast = now > blockEnd;
-
-    // Tide state for this window (if we have tide predictions)
-    var tideStr = '';
-    if (tidePredictions && tidePredictions.length) {
-      var midTime = new Date(dateStr + 'T' + Math.floor((startH + endH) / 2).toString().padStart(2,'0') + ':00:00');
-      for (var j = 1; j < tidePredictions.length; j++) {
-        var t0 = new Date(tidePredictions[j-1].t).getTime();
-        var t1 = new Date(tidePredictions[j].t).getTime();
-        if (midTime.getTime() >= t0 && midTime.getTime() <= t1) {
-          var v0 = parseFloat(tidePredictions[j-1].v);
-          var v1 = parseFloat(tidePredictions[j].v);
-          tideStr = (v1 > v0) ? '↑ Rising' : '↓ Falling';
-          break;
-        }
-      }
-    }
 
     return '<div class="plan-card' + (highlight ? ' highlight' : '') + (isPast ? ' past' : '') + '">' +
       '<div class="pc-label">' + label + '</div>' +
@@ -1524,8 +1534,15 @@ function renderWeather() {
   document.getElementById('statusPill').className = 'status-pill ' + status.cls;
   document.getElementById('statusText').textContent = status.text;
 
-  // Boating meter
-  const scores = calcBoatingScore(windMph, Math.round(c.wind_gusts_10m), rainPct, visMi, Math.round(c.temperature_2m), c.weather_code);
+  // Boating meter — get current tide direction
+  let currentTideDir = null;
+  const tideDirEl = document.getElementById('tideDir');
+  if (tideDirEl) {
+    const dirText = tideDirEl.textContent.toLowerCase();
+    if (dirText === 'rising') currentTideDir = 'rising';
+    else if (dirText === 'falling') currentTideDir = 'falling';
+  }
+  const scores = calcBoatingScore(windMph, Math.round(c.wind_gusts_10m), rainPct, visMi, Math.round(c.temperature_2m), c.weather_code, null, currentTideDir);
   renderMeter(scores);
   renderPlanning();
 
@@ -1557,7 +1574,8 @@ async function fetchNOAAStations() {
   const res = await fetch('https://api.tidesandcurrents.noaa.gov/mdapi/prod/webapi/stations.json?type=tidepredictions');
   if (!res.ok) throw new Error('Failed to fetch NOAA stations');
   const json = await res.json();
-  noaaStationsCache = json.stations.filter(s => s.tidal);
+  // type=tidepredictions already filters to tidal stations; just ensure lat/lng exist
+  noaaStationsCache = json.stations.filter(s => s.lat && s.lng);
   localStorage.setItem('noaaStations', JSON.stringify(noaaStationsCache));
   return noaaStationsCache;
 }
@@ -1580,22 +1598,37 @@ function findNearestStation(stations, lat, lon) {
 }
 
 async function searchLocation() {
-  const input = document.getElementById('locationInput').value.trim();
-  if (!input) return;
+  const rawInput = document.getElementById('locationInput').value.trim();
+  if (!rawInput) return;
   const btn = document.getElementById('locationBtn');
   btn.textContent = '⏳ ...';
   const info = document.getElementById('stationInfo');
 
   try {
+    // Clean input: Open-Meteo geocoding doesn't handle commas or state abbrevs well
+    // "Miami, FL" -> just search "Miami", "New York, NY" -> "New York"
+    const cleanedInput = rawInput.split(',')[0].trim();
+
     // Geocode with Open-Meteo
-    const geoRes = await fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(input) + '&count=1&language=en&format=json');
+    const geoRes = await fetch('https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(cleanedInput) + '&count=5&language=en&format=json');
     const geoJson = await geoRes.json();
     if (!geoJson.results || !geoJson.results.length) {
       info.textContent = 'Location not found. Try a different search.';
       btn.textContent = '📍 Search';
       return;
     }
-    const loc = geoJson.results[0];
+
+    // If user included a state/country after comma, try to match it
+    const afterComma = rawInput.includes(',') ? rawInput.split(',').slice(1).join(',').trim().toLowerCase() : '';
+    let loc = geoJson.results[0]; // default to first result
+    if (afterComma) {
+      const match = geoJson.results.find(r =>
+        (r.admin1 && r.admin1.toLowerCase().startsWith(afterComma)) ||
+        (r.country_code && r.country_code.toLowerCase() === afterComma) ||
+        (r.country && r.country.toLowerCase().startsWith(afterComma))
+      );
+      if (match) loc = match;
+    }
     LAT = loc.latitude;
     LON = loc.longitude;
 
